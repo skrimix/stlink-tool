@@ -90,4 +90,7 @@ int stlink_dfu_download(stlink_info_s *stlink_info, uint8_t *data, size_t data_l
 int stlink_flash(stlink_info_s *stlink_info, const char *filename);
 bool stlink_exit_dfu(stlink_info_s *info);
 
+/* J-Link (converted ST-Link) to ST-Link bootloader switch */
+int jlink_switch_to_stlink_bootloader(libusb_device_handle *dev_handle);
+
 #endif /*STLINK_H*/

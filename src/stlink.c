@@ -454,3 +454,43 @@ bool stlink_exit_dfu(stlink_info_s *const info)
 	}
 	return true;
 }
+
+/*
+ * Switch a J-Link (converted from ST-Link) back to ST-Link bootloader mode.
+ * Sends the J-Link bootloader activation command (0x06) via USB bulk endpoint.
+ * After this, the device should re-enumerate as an ST-Link in DFU mode.
+ *
+ * J-Link USB endpoints:
+ *   - EP2 OUT (0x02) for commands
+ *   - EP1 IN  (0x81) for responses
+ */
+int jlink_switch_to_stlink_bootloader(libusb_device_handle *const dev_handle)
+{
+	/* J-Link command to enter ST-Link bootloader mode */
+	uint8_t cmd[1] = {0x06U};
+	uint8_t response[1] = {0};
+	int rw_bytes = 0;
+
+	/* Send the bootloader activation command to EP2 OUT */
+	int res = libusb_bulk_transfer(dev_handle, 2 | LIBUSB_ENDPOINT_OUT, cmd, sizeof(cmd), &rw_bytes, USB_TIMEOUT);
+	if (res) {
+		fprintf(stderr, "Failed to send bootloader command: %s\n", libusb_strerror(res));
+		return -1;
+	}
+
+	/* Read the response from EP1 IN */
+	res = libusb_bulk_transfer(dev_handle, 1 | LIBUSB_ENDPOINT_IN, response, sizeof(response), &rw_bytes, USB_TIMEOUT);
+	if (res) {
+		/* Timeout or error on read is expected - device may disconnect immediately */
+		fprintf(stderr, "Note: Device may have disconnected (response read: %s)\n", libusb_strerror(res));
+		return 0; /* Consider this success - device is switching */
+	}
+
+	/* Response 0x00 = already in bootloader, 0x01 = switching now */
+	if (response[0] != 0x00U && response[0] != 0x01U) {
+		fprintf(stderr, "Unexpected bootloader response: 0x%02X\n", response[0]);
+		return -1;
+	}
+
+	return 0;
+}

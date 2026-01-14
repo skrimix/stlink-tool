@@ -3,10 +3,13 @@
 libusb tool for flashing chinese ST-Link dongles. Please note that similarly to ST's updater, the uploaded firmware won't replace the bootloader (meaning that you should be able to reflash the original afterwards using [ST's firmware update utility](http://www.st.com/en/development-tools/stsw-link007.html)).
 
 ```
-Usage: ./stlink-tool [options] firmware.bin
+Usage: ./stlink-tool [options] [firmware.bin]
 Options:
-	-p	Probe the ST-Link adapter
-	-h	Show help
+        -p      Probe the ST-Link adapter
+        -j      Switch J-Link (converted ST-Link) back to ST-Link bootloader before proceeding
+        -h      Show help
+
+        Application is started when called without argument or after firmware load
 ```
 
 stlink-tool has been tested under Linux and macOS. With [sakana280's fork](https://github.com/sakana280/stlink-tool) you can use it under Windows.

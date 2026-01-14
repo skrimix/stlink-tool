@@ -56,11 +56,16 @@
 #define BMP_APPL_PID 0x6018
 #define BMP_DFU_IF   4
 
+#define VENDOR_ID_SEGGER        0x1366U
+#define PRODUCT_ID_JLINK        0x0101U
+#define PRODUCT_ID_JLINK_PLUS   0x0105U
+
 void print_help(char *argv[])
 {
 	printf("Usage: %s [options] [firmware.bin]\n", argv[0]);
 	printf("Options:\n");
 	printf("\t-p\tProbe the ST-Link adapter\n");
+	printf("\t-j\tSwitch J-Link (converted ST-Link) back to ST-Link bootloader before proceeding\n");
 	printf("\t-h\tShow help\n\n");
 	printf("\tApplication is started when called without argument or after firmware load\n\n");
 }
@@ -69,11 +74,15 @@ int main(int argc, char **argv)
 {
 	int opt = -1;
 	bool probe = false;
+	bool jlink_switch = false;
 
-	while ((opt = getopt(argc, argv, "hp")) != -1) {
+	while ((opt = getopt(argc, argv, "hpj")) != -1) {
 		switch (opt) {
 		case 'p': /* Probe mode */
 			probe = true;
+			break;
+		case 'j': /* J-Link to ST-Link bootloader switch */
+			jlink_switch = true;
 			break;
 		case 'h': /* Help */
 			print_help(argv);
@@ -131,6 +140,38 @@ rescan:
 			mssleep(2000);
 			goto rescan;
 			break;
+		}
+		/* Handle J-Link devices (converted ST-Links) */
+		if (jlink_switch && desc.idVendor == VENDOR_ID_SEGGER) {
+			fprintf(stderr, "Found SEGGER device (VID:PID = %04X:%04X)\n", desc.idVendor, desc.idProduct);
+			fprintf(stderr, "Attempting to switch J-Link to ST-Link bootloader...\n");
+			res = libusb_open(dev, &info.stinfo_dev_handle);
+			if (res < 0) {
+				fprintf(stderr, "Cannot open J-Link device: %s\n", libusb_strerror(res));
+				continue;
+			}
+			if (libusb_claim_interface(info.stinfo_dev_handle, 0)) {
+				fprintf(stderr, "Unable to claim USB interface. Please close all programs that "
+					"may communicate with the J-Link.\n");
+				libusb_close(info.stinfo_dev_handle);
+				continue;
+			}
+			res = jlink_switch_to_stlink_bootloader(info.stinfo_dev_handle);
+			libusb_release_interface(info.stinfo_dev_handle, 0);
+			libusb_close(info.stinfo_dev_handle);
+			if (res == 0) {
+				fprintf(stderr, "Success! Device should now re-enumerate as ST-Link in DFU mode.\n");
+				fprintf(stderr, "Waiting for re-enumeration...\n");
+				libusb_free_device_list(devs, n_devs);
+				mssleep(5000);
+				jlink_switch = false; /* Don't try again on rescan */
+				goto rescan;
+			} else {
+				fprintf(stderr, "Failed to switch to ST-Link bootloader.\n");
+				libusb_free_device_list(devs, n_devs);
+				libusb_exit(info.stinfo_usb_ctx);
+				return EXIT_FAILURE;
+			}
 		}
 		if (desc.idVendor != VENDOR_ID_STLINK || (desc.idProduct & PRODUCT_ID_STLINK_MASK) != PRODUCT_ID_STLINK_GROUP)
 			continue;
